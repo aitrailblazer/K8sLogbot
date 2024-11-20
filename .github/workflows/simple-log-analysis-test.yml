@@ -20,13 +20,16 @@ jobs:
         env:
           ACCESS_CODE_HASH: ${{ secrets.ACCESS_CODE_HASH }}
         run: |
-          # Calculate the SHA256 hash of the provided access code
-          echo "${{ github.event.inputs.access_code }}" | sha256sum | awk '{print $1}' | tr '[:upper:]' '[:lower:]' > computed_hash.txt
+          # Calculate the SHA256 hash of the provided access code without a newline
+          echo -n "${{ github.event.inputs.access_code }}" | sha256sum | awk '{print $1}' | tr '[:upper:]' '[:lower:]' > computed_hash.txt
           # Compare the calculated hash with the stored hash
-          if ! cmp -s computed_hash.txt <(echo $ACCESS_CODE_HASH); then
+          if ! cmp -s computed_hash.txt <(echo "$ACCESS_CODE_HASH"); then
             echo "Access code validation failed."
             exit 1
+          else
+            echo "Access code validation succeeded."
           fi
+
 
       - name: Create Issue with Sample Log Analysis
         if: success()  # Only proceed if the above step was successful
