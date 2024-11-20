@@ -16,7 +16,8 @@ class Program
         }
 
         string accessCode = args[0];
-        string knownSecretHash = Environment.GetEnvironmentVariable("ACCESS_CODE_HASH");
+
+        string knownSecretHash = Environment.GetEnvironmentVariable("ACCESS_CODE_HASH") ?? string.Empty;
 
         if (string.IsNullOrEmpty(knownSecretHash))
         {
@@ -35,40 +36,69 @@ class Program
         }
     }
 
+    // This method is required to suppress the CS1998 warning
+    private static Task CompletedTask => Task.CompletedTask;
+
     private static async Task<bool> ValidateAccessCode(string accessCode, string knownSecretHash)
     {
-        using var sha256 = SHA256.Create();
-        var codeBytes = Encoding.UTF8.GetBytes(accessCode);
-        var computedHash = BitConverter.ToString(sha256.ComputeHash(codeBytes)).Replace("-", "").ToLower();
+        using (var sha256 = SHA256.Create())
+        {
+            var codeBytes = Encoding.UTF8.GetBytes(accessCode);
+            var computedHash = BitConverter.ToString(sha256.ComputeHash(codeBytes)).Replace("-", "").ToLower();
 
-        return knownSecretHash.Equals(computedHash, StringComparison.OrdinalIgnoreCase);
+            return await Task.FromResult(knownSecretHash.Equals(computedHash, StringComparison.OrdinalIgnoreCase));
+        }
     }
 
     private static async Task TriggerGitHubAction(string accessCode)
     {
+        // Escape quotes in the access code to prevent command injection
+        string escapedAccessCode = accessCode.Replace("\"", "\\\"");
+
         var processStartInfo = new ProcessStartInfo
         {
             FileName = "gh",
-            Arguments = $"workflow run simple-log-analysis-test.yml -f accessCode=\"{accessCode}\"",
+            Arguments = $"workflow run simple-log-analysis-test.yml -f access_code=\"{escapedAccessCode}\"",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
 
-        using (var process = new Process { StartInfo = processStartInfo })
+        try
         {
-            process.Start();
-            string output = await process.StandardOutput.ReadToEndAsync();
-            Console.WriteLine(output);
-
-            await Task.Run(() => process.WaitForExit());
-
-            if (process.ExitCode != 0)
+            using (var process = new Process { StartInfo = processStartInfo })
             {
-                string error = await process.StandardError.ReadToEndAsync();
-                Console.WriteLine($"Error: {error}");
+                process.Start();
+
+                var outputTask = process.StandardOutput.ReadToEndAsync();
+                var errorTask = process.StandardError.ReadToEndAsync();
+
+                await Task.WhenAll(outputTask, errorTask);
+
+                Console.WriteLine($"GitHub Action Output: {await outputTask}");
+
+                if (process.WaitForExit(30000)) // Wait for 30 seconds
+                {
+                    if (process.ExitCode != 0)
+                    {
+                        Console.WriteLine($"Error when triggering GitHub Action: {await errorTask}");
+                    }
+                    else
+                    {
+                        Console.WriteLine("GitHub Action successfully triggered.");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("GitHub Action did not complete within the expected timeframe.");
+                    process.Kill(); // Ensure the process is terminated if it hangs
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error occurred while triggering the GitHub Action: {ex.Message}");
         }
     }
 }

@@ -2,16 +2,34 @@ name: Simple Log Analysis Test
 
 on:
   workflow_dispatch:
+    inputs:
+      access_code:
+        description: 'Access Code'
+        required: true
+        type: string
 
 jobs:
-  create-test-issue:
+  validate-and-act:
     runs-on: ubuntu-latest
     environment: production
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Validate Access Code
+        env:
+          ACCESS_CODE_HASH: ${{ secrets.ACCESS_CODE_HASH }}
+        run: |
+          # Calculate the SHA256 hash of the provided access code
+          echo "${{ github.event.inputs.access_code }}" | sha256sum | awk '{print $1}' | tr '[:upper:]' '[:lower:]' > computed_hash.txt
+          # Compare the calculated hash with the stored hash
+          if ! cmp -s computed_hash.txt <(echo $ACCESS_CODE_HASH); then
+            echo "Access code validation failed."
+            exit 1
+          fi
+
       - name: Create Issue with Sample Log Analysis
+        if: success()  # Only proceed if the above step was successful
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GH_TOKEN }}
