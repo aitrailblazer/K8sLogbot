@@ -1,11 +1,12 @@
 name: Simple Log Analysis Test
 
 on:
-  workflow_dispatch:  # Allows manual triggering of the workflow
+  workflow_dispatch:
 
 jobs:
   create-test-issue:
     runs-on: ubuntu-latest
+    environment: production  # If you've created an environment
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -13,11 +14,11 @@ jobs:
       - name: Create Issue with Sample Log Analysis
         uses: actions/github-script@v6
         with:
-          github-token: ${{secrets.GITHUB_TOKEN}}
+          github-token: ${{ secrets.PAT }}
           script: |
             const issueTitle = 'Log Analysis Test';
             const issueBody = `### Sample Log Analysis
-            
+
             Here's a snippet of our logs:
 
             \`\`\`
