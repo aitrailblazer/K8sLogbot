@@ -1,11 +1,18 @@
 ﻿using System;
+using System.ClientModel;
+
 using System.Diagnostics;
 using System.Text;
 using System.Threading.Tasks;
 using System.Security.Cryptography;
 using Azure;
-using Azure.AI.Inference;
+using Azure.AI.OpenAI;
 
+using OpenAI.Chat;
+
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Connectors.AzureOpenAI;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
 class Program
 {
     static async Task Main(string[] args)
@@ -17,7 +24,7 @@ class Program
         }
 
         string accessCode = args[0];
-        string knownSecretHash = Environment.GetEnvironmentVariable("ACCESS_CODE_HASH");
+        string? knownSecretHash = Environment.GetEnvironmentVariable("ACCESS_CODE_HASH");
 
         if (string.IsNullOrEmpty(knownSecretHash))
         {
@@ -28,22 +35,7 @@ class Program
         if (await ValidateAccessCode(accessCode, knownSecretHash))
         {
             Console.WriteLine("Access code is valid. Generating GPT-based analysis...");
-
-            // Original log data
-            string logData = @"
-2023-11-19T12:30:00.000Z [info]  Application starting...
-2023-11-19T12:30:15.000Z [info]  Database connection established.
-2023-11-19T12:32:00.000Z [warn]  Database query took longer than 500ms, potential performance bottleneck.
-2023-11-19T12:33:00.000Z [error] Failed to connect to external service: Connection refused
-2023-11-19T12:35:00.000Z [info]  External service now reachable, resuming normal operation.
-2023-11-19T12:40:00.000Z [info]  Processing batch job #12345.
-2023-11-19T12:45:00.000Z [warn]  Memory usage is at 85%, monitor for potential issues.
-2023-11-19T12:50:00.000Z [error] Out of memory error during batch job processing. Job #12345 was terminated.
-2023-11-19T12:55:00.000Z [info]  Application restarted after OutOfMemoryError, health checks passed.
-2023-11-19T13:00:00.000Z [info]  New request received at /api/v1/data endpoint.
-2023-11-19T13:05:00.000Z [warn]  Retrying operation after temporary network issue.";
-
-            // Call GPT for analysis
+            string logData = GetLogData();
             var (issueTitle, logAnalysisContent) = await GenerateGPTAnalysis(logData);
 
             if (string.IsNullOrEmpty(issueTitle) || string.IsNullOrEmpty(logAnalysisContent))
@@ -63,62 +55,103 @@ class Program
 
     private static async Task<bool> ValidateAccessCode(string accessCode, string knownSecretHash)
     {
-        using (var sha256 = SHA256.Create())
-        {
-            var codeBytes = Encoding.UTF8.GetBytes(accessCode);
-            var computedHash = BitConverter.ToString(sha256.ComputeHash(codeBytes)).Replace("-", "").ToLower();
+        await Task.Yield(); // Make the method truly async
+        using var sha256 = SHA256.Create();
+        var codeBytes = Encoding.UTF8.GetBytes(accessCode);
+        var computedHash = BitConverter.ToString(sha256.ComputeHash(codeBytes)).Replace("-", "").ToLower();
+        return knownSecretHash.Equals(computedHash, StringComparison.OrdinalIgnoreCase);
+    }
 
-            return knownSecretHash.Equals(computedHash, StringComparison.OrdinalIgnoreCase);
-        }
+    private static string GetLogData()
+    {
+        return @"
+2023-11-19T12:30:00.000Z [info]  Application starting...
+2023-11-19T12:30:15.000Z [info]  Database connection established.
+2023-11-19T12:32:00.000Z [warn]  Database query took longer than 500ms, potential performance bottleneck.
+2023-11-19T12:33:00.000Z [error] Failed to connect to external service: Connection refused
+2023-11-19T12:35:00.000Z [info]  External service now reachable, resuming normal operation.
+2023-11-19T12:40:00.000Z [info]  Processing batch job #12345.
+2023-11-19T12:45:00.000Z [warn]  Memory usage is at 85%, monitor for potential issues.
+2023-11-19T12:50:00.000Z [error] Out of memory error during batch job processing. Job #12345 was terminated.
+2023-11-19T12:55:00.000Z [info]  Application restarted after OutOfMemoryError, health checks passed.
+2023-11-19T13:00:00.000Z [info]  New request received at /api/v1/data endpoint.
+2023-11-19T13:05:00.000Z [warn]  Retrying operation after temporary network issue.";
     }
 
     private static async Task<(string issueTitle, string logAnalysisContent)> GenerateGPTAnalysis(string logData)
     {
         try
         {
-            var endpoint = new Uri(Environment.GetEnvironmentVariable("ENDPOINT"));
-            var credential = new AzureKeyCredential(Environment.GetEnvironmentVariable("API_KEY"));
-            var model = Environment.GetEnvironmentVariable("MODEL");
+            string? endpointString = Environment.GetEnvironmentVariable("ENDPOINT");
+            string? apiKey = Environment.GetEnvironmentVariable("API_KEY");
+            string? modelName = Environment.GetEnvironmentVariable("MODEL");
 
-            var client = new ChatCompletionsClient(endpoint, credential, new ChatCompletionsClientOptions());
-
-            string prompt = $@"
-Analyze the following log data and create:
-1. A concise, descriptive title for the analysis.
-2. A structured summary of key events, warnings, and errors.
-
-Log Data:
-{logData}";
-
-            var requestOptions = new ChatCompletionsOptions()
+            if (string.IsNullOrEmpty(endpointString) || string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(modelName))
             {
-                Messages =
-                {
-                    new ChatRequestSystemMessage("You are a helpful assistant specialized in analyzing logs."),
-                    new ChatRequestUserMessage(prompt),
-                },
+                throw new ArgumentException("Missing required environment variables (ENDPOINT, API_KEY, or MODEL)");
+            }
+
+            // Create a kernel with Azure OpenAI chat completion
+            Kernel kernel = Kernel.CreateBuilder()
+                .AddAzureOpenAIChatCompletion(
+                    deploymentName: modelName,
+                    endpoint: endpointString,
+                    apiKey: apiKey)
+                .Build();
+
+            // Define the semantic function
+            const string SemanticFunction = """
+        You are a helpful assistant specialized in analyzing logs.
+
+        Analyze the following log data and create:
+        1. A concise, descriptive title for the analysis.
+        2. A structured summary of key events, warnings, and errors.
+
+        Log Data:
+        {{ $logData }}
+
+        [TASK]
+        Create:
+        - Title: (Concise title)
+        - Analysis:
+        (Structured summary)
+        """;
+
+            // Configure execution settings
+            var executionSettings = new AzureOpenAIPromptExecutionSettings
+            {
                 Temperature = 0.7f,
-                NucleusSamplingFactor = 0.9f,
                 MaxTokens = 1000,
-                Model = model
+                ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions
             };
 
-            Response<ChatCompletions> response = await client.CompleteAsync(requestOptions);
+            // Create the Oracle function from the prompt
+            var oracle = kernel.CreateFunctionFromPrompt(SemanticFunction, executionSettings);
 
-            string[] output = response.Value.Choices[0].Message.Content.Split(new[] { "\n" }, 2, StringSplitOptions.RemoveEmptyEntries);
+            // Define arguments for the prompt
+            var arguments = new KernelArguments
+            {
+                ["logData"] = logData
+            };
 
-            string issueTitle = output[0]?.Replace("Title: ", "").Trim();
-            string logAnalysisContent = output.Length > 1 ? output[1].Trim() : string.Empty;
+            // Invoke the kernel with the oracle function and arguments
+            var response = await kernel.InvokeAsync(oracle, arguments);
+
+            // Parse the response
+            var content = response.GetValue<string>();
+            string[] output = content?.Split(new[] { "\n" }, 2, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+
+            string issueTitle = output.Length > 0 ? output[0].Replace("Title: ", "").Trim() : "Default Title";
+            string logAnalysisContent = output.Length > 1 ? output[1].Replace("Analysis:", "").Trim() : "No analysis available";
 
             return (issueTitle, logAnalysisContent);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"An error occurred during GPT analysis: {ex.Message}");
-            return (string.Empty, string.Empty);
+            return ("Error in Analysis", ex.Message);
         }
     }
-
     private static async Task TriggerGitHubAction(string accessCode, string issueTitle, string logAnalysisContent)
     {
         string escapedAccessCode = EscapeForCLI(accessCode);
@@ -137,32 +170,39 @@ Log Data:
 
         try
         {
-            using (var process = new Process { StartInfo = processStartInfo })
+            using var process = new Process { StartInfo = processStartInfo };
+            process.Start();
+
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+
+            await Task.WhenAll(outputTask, errorTask);
+            string output = await outputTask;
+            string error = await errorTask;
+
+            Console.WriteLine($"GitHub Action Output:\n{output}");
+
+            if (process.WaitForExit(30000)) // Wait for 30 seconds
             {
-                process.Start();
-
-                var outputTask = process.StandardOutput.ReadToEndAsync();
-                var errorTask = process.StandardError.ReadToEndAsync();
-
-                await Task.WhenAll(outputTask, errorTask);
-
-                Console.WriteLine($"GitHub Action Output:\n{await outputTask}");
-
-                if (process.WaitForExit(30000)) // Wait for 30 seconds
+                if (process.ExitCode != 0)
                 {
-                    if (process.ExitCode != 0)
-                    {
-                        Console.WriteLine($"Error when triggering GitHub Action:\n{await errorTask}");
-                    }
-                    else
-                    {
-                        Console.WriteLine("GitHub Action successfully triggered.");
-                    }
+                    Console.WriteLine($"Error when triggering GitHub Action:\n{error}");
                 }
                 else
                 {
-                    Console.WriteLine("GitHub Action did not complete within the expected timeframe.");
+                    Console.WriteLine("GitHub Action successfully triggered.");
+                }
+            }
+            else
+            {
+                Console.WriteLine("GitHub Action did not complete within the expected timeframe.");
+                try
+                {
                     process.Kill();
+                }
+                catch (InvalidOperationException)
+                {
+                    // Process may have already exited
                 }
             }
         }
