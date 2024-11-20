@@ -1,0 +1,46 @@
+name: Simple Log Analysis Test
+
+on:
+  workflow_dispatch:  # Allows manual triggering of the workflow
+
+jobs:
+  create-test-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Create Issue with Sample Log Analysis
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            const issueTitle = 'Log Analysis Test';
+            const issueBody = `### Sample Log Analysis
+            
+            Here's a snippet of our logs:
+
+            \`\`\`
+            2023-11-20T15:23:01Z warning message here
+            2023-11-20T15:24:01Z error message here
+            2023-11-20T15:25:01Z info message here
+            \`\`\`
+
+            **Analysis Results:**
+            - **Warnings Detected:**
+              - A warning was found at 15:23:01Z suggesting a potential issue with resource allocation.
+            - **Errors Found:**
+              - An error occurred at 15:24:01Z; this might indicate a configuration problem.
+            - **Info Logs:**
+              - Normal operation logs were observed.
+
+            **Recommendations:**
+            - Investigate the error and warning logs for root causes.
+            - Ensure configurations are correct and resources are adequately provisioned.`;
+
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: issueTitle,
+              body: issueBody,
+            });
