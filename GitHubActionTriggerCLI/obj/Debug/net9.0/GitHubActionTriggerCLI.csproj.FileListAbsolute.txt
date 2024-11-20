@@ -1,0 +1,15 @@
+/Users/constantinevassilev02/MyLocalDocuments/go-projects/K8sLogbot/GitHubActionTriggerCLI/bin/Debug/net9.0/GitHubActionTriggerCLI
+/Users/constantinevassilev02/MyLocalDocuments/go-projects/K8sLogbot/GitHubActionTriggerCLI/bin/Debug/net9.0/GitHubActionTriggerCLI.deps.json
+/Users/constantinevassilev02/MyLocalDocuments/go-projects/K8sLogbot/GitHubActionTriggerCLI/bin/Debug/net9.0/GitHubActionTriggerCLI.runtimeconfig.json
+/Users/constantinevassilev02/MyLocalDocuments/go-projects/K8sLogbot/GitHubActionTriggerCLI/bin/Debug/net9.0/GitHubActionTriggerCLI.dll
+/Users/constantinevassilev02/MyLocalDocuments/go-projects/K8sLogbot/GitHubActionTriggerCLI/bin/Debug/net9.0/GitHubActionTriggerCLI.pdb
+/Users/constantinevassilev02/MyLocalDocuments/go-projects/K8sLogbot/GitHubActionTriggerCLI/obj/Debug/net9.0/GitHubActionTriggerCLI.GeneratedMSBuildEditorConfig.editorconfig
+/Users/constantinevassilev02/MyLocalDocuments/go-projects/K8sLogbot/GitHubActionTriggerCLI/obj/Debug/net9.0/GitHubActionTriggerCLI.AssemblyInfoInputs.cache
+/Users/constantinevassilev02/MyLocalDocuments/go-projects/K8sLogbot/GitHubActionTriggerCLI/obj/Debug/net9.0/GitHubActionTriggerCLI.AssemblyInfo.cs
+/Users/constantinevassilev02/MyLocalDocuments/go-projects/K8sLogbot/GitHubActionTriggerCLI/obj/Debug/net9.0/GitHubActionTriggerCLI.csproj.CoreCompileInputs.cache
+/Users/constantinevassilev02/MyLocalDocuments/go-projects/K8sLogbot/GitHubActionTriggerCLI/obj/Debug/net9.0/GitHubActionTriggerCLI.sourcelink.json
+/Users/constantinevassilev02/MyLocalDocuments/go-projects/K8sLogbot/GitHubActionTriggerCLI/obj/Debug/net9.0/GitHubActionTriggerCLI.dll
+/Users/constantinevassilev02/MyLocalDocuments/go-projects/K8sLogbot/GitHubActionTriggerCLI/obj/Debug/net9.0/refint/GitHubActionTriggerCLI.dll
+/Users/constantinevassilev02/MyLocalDocuments/go-projects/K8sLogbot/GitHubActionTriggerCLI/obj/Debug/net9.0/GitHubActionTriggerCLI.pdb
+/Users/constantinevassilev02/MyLocalDocuments/go-projects/K8sLogbot/GitHubActionTriggerCLI/obj/Debug/net9.0/GitHubActionTriggerCLI.genruntimeconfig.cache
+/Users/constantinevassilev02/MyLocalDocuments/go-projects/K8sLogbot/GitHubActionTriggerCLI/obj/Debug/net9.0/ref/GitHubActionTriggerCLI.dll
