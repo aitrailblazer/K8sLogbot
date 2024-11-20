@@ -68,14 +68,15 @@ class Program
 2023-11-19T12:30:00.000Z [info]  Application starting...
 2023-11-19T12:30:15.000Z [info]  Database connection established.
 2023-11-19T12:32:00.000Z [warn]  Database query took longer than 500ms, potential performance bottleneck.
-2023-11-19T12:33:00.000Z [error] Failed to connect to external service: Connection refused
+2023-11-19T12:33:00.000Z [error] Failed to connect to external service: Connection refused.
 2023-11-19T12:35:00.000Z [info]  External service now reachable, resuming normal operation.
 2023-11-19T12:40:00.000Z [info]  Processing batch job #12345.
 2023-11-19T12:45:00.000Z [warn]  Memory usage is at 85%, monitor for potential issues.
 2023-11-19T12:50:00.000Z [error] Out of memory error during batch job processing. Job #12345 was terminated.
 2023-11-19T12:55:00.000Z [info]  Application restarted after OutOfMemoryError, health checks passed.
 2023-11-19T13:00:00.000Z [info]  New request received at /api/v1/data endpoint.
-2023-11-19T13:05:00.000Z [warn]  Retrying operation after temporary network issue.";
+2023-11-19T13:05:00.000Z [warn]  Retrying operation after temporary network issue.
+";
     }
 
     private static async Task<(string issueTitle, string logAnalysisContent)> GenerateGPTAnalysis(string logData)
@@ -99,23 +100,43 @@ class Program
                     apiKey: apiKey)
                 .Build();
 
-            // Define the semantic function
-            const string SemanticFunction = """
-        You are a helpful assistant specialized in analyzing logs.
+            // Define the semantic function for the title
+            const string TitleFunction = """
+You are a Kubernetes pod analysis assistant.
 
-        Analyze the following log data and create:
-        1. A concise, descriptive title for the analysis.
-        2. A structured summary of key events, warnings, and errors.
+Analyze the following pod log data and create:
+- A concise and descriptive title summarizing the pod health and issues (without prefixes like "Title:").
 
-        Log Data:
-        {{ $logData }}
+Pod Log Data:
+{{ $logData }}
 
-        [TASK]
-        Create:
-        - Title: (Concise title)
-        - Analysis:
-        (Structured summary)
-        """;
+[TASK]
+Create:
+- Summary: (Concise title summarizing the pod health and issues)
+""";
+
+            // Define the semantic function for the analysis
+            const string AnalysisFunction = """
+You are a Kubernetes pod analysis assistant.
+
+Analyze the following pod log data and create a structured summary including:
+   - Key events related to pod lifecycle and health.
+   - Warnings and errors with timestamps.
+   - Recommendations for resolving issues if applicable.
+
+Pod Log Data:
+{{ $logData }}
+
+[TASK]
+Create:
+- Analysis:
+  - Key Events:
+    (List significant events chronologically)
+  - Warnings and Errors:
+    (Summarize warnings and errors with details and timestamps)
+  - Recommendations:
+    (Provide actionable recommendations based on the analysis)
+""";
 
             // Configure execution settings
             var executionSettings = new AzureOpenAIPromptExecutionSettings
@@ -125,8 +146,9 @@ class Program
                 ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions
             };
 
-            // Create the Oracle function from the prompt
-            var oracle = kernel.CreateFunctionFromPrompt(SemanticFunction, executionSettings);
+            // Create functions for title and analysis
+            var titleOracle = kernel.CreateFunctionFromPrompt(TitleFunction, executionSettings);
+            var analysisOracle = kernel.CreateFunctionFromPrompt(AnalysisFunction, executionSettings);
 
             // Define arguments for the prompt
             var arguments = new KernelArguments
@@ -134,15 +156,18 @@ class Program
                 ["logData"] = logData
             };
 
-            // Invoke the kernel with the oracle function and arguments
-            var response = await kernel.InvokeAsync(oracle, arguments);
+            // Invoke the kernel for the title
+            var titleResponse = await kernel.InvokeAsync(titleOracle, arguments);
+            string issueTitle = titleResponse.GetValue<string>()?.Trim() ?? "Default Title";
 
-            // Parse the response
-            var content = response.GetValue<string>();
-            string[] output = content?.Split(new[] { "\n" }, 2, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+            // Ensure the title has no prefixes
+            issueTitle = issueTitle.Replace("**Title:**", "").Trim();
+            // Remove unwanted prefix "Pod Health Summary:" if present
+            issueTitle = issueTitle.Replace("Pod Health Summary:", "").Trim();
 
-            string issueTitle = output.Length > 0 ? output[0].Replace("Title: ", "").Trim() : "Default Title";
-            string logAnalysisContent = output.Length > 1 ? output[1].Replace("Analysis:", "").Trim() : "No analysis available";
+            // Invoke the kernel for the analysis
+            var analysisResponse = await kernel.InvokeAsync(analysisOracle, arguments);
+            string logAnalysisContent = analysisResponse.GetValue<string>()?.Trim() ?? "No analysis available";
 
             return (issueTitle, logAnalysisContent);
         }
