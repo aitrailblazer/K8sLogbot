@@ -36,6 +36,7 @@ jobs:
             exit 1
           else
             echo "Access code validation succeeded."
+          fi
 
       - name: Create Issue with Log Analysis
         if: success()  # Only proceed if the above step was successful
